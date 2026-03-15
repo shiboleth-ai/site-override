@@ -2,19 +2,24 @@
 """Entry point for site-override."""
 
 import atexit
+import logging
 import signal
 import sys
 
 from app import create_app
 
+# ── Logging ────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(name)s] %(levelname)s %(message)s",
+)
 
 app = create_app()
 session_manager = app.config["SESSION_MANAGER"]
 
 
 def cleanup(signum=None, frame=None):
-    """Best-effort cleanup on exit. Kills server process; hosts file
-    may need manual cleanup if osascript can't show a dialog."""
+    """Best-effort cleanup on exit."""
     status = session_manager.get_status()
     if status.get("active"):
         print("\n[site-override] Cleaning up active session...")
@@ -24,7 +29,6 @@ def cleanup(signum=None, frame=None):
             print(
                 "[site-override] To manually clean up, run:\n"
                 '  sudo sed -i "" "/# SITE-OVERRIDE-MANAGED/d" /etc/hosts && '
-                'sudo pfctl -a "site-override" -F all 2>/dev/null && '
                 "sudo dscacheutil -flushcache && "
                 "sudo killall -HUP mDNSResponder"
             )
@@ -42,10 +46,6 @@ with app.app_context():
     if stale and stale.get("stale"):
         if stale.get("cleaned"):
             print("[site-override] Cleaned up stale session state from previous crash.")
-            print(
-                "[site-override] Note: /etc/hosts may still have stale entries. "
-                "Run the cleanup command above if needed."
-            )
         else:
             print(
                 f"[site-override] WARNING: Found active session for {stale.get('domain')}. "

@@ -8,12 +8,15 @@ Architecture:
 """
 
 import json
+import logging
 import os
 import signal
 import subprocess
 import sys
 import time
 
+
+log = logging.getLogger("site-override")
 
 HOSTS_MARKER = "# SITE-OVERRIDE-MANAGED"
 
@@ -30,9 +33,9 @@ class SessionManager:
         try:
             with open(self.state_file) as f:
                 state = json.load(f)
-            # Verify server is actually running
             pid = state.get("server_pid")
             if pid and not self._is_process_running(pid):
+                log.warning("Server PID %s no longer running, cleaning stale state", pid)
                 self._remove_state()
                 return {"active": False, "stale_cleaned": True}
             return {"active": True, **state}
@@ -56,35 +59,35 @@ class SessionManager:
         python_path = sys.executable
         log_path = os.path.join(os.path.dirname(self.state_file), "server.log")
 
+        log.info("Starting hijack session for %s", domain)
+        log.info("  site_dir: %s", site_dir)
+        log.info("  cert: %s", cert_path)
+        log.info("  server script: %s", hijack_server_path)
+        log.info("  python: %s", python_path)
+
         # Pre-create log file as current user (root can still write to it)
         with open(log_path, "w"):
             pass
 
         # Single osascript call that does everything as root:
-        # 1. Kill any zombie servers left on 80/443
+        # 1. Kill any zombie servers on 80/443
         # 2. Add /etc/hosts entry
-        # 3. Start server on ports 80/443 in background
-        # 4. Flush DNS
-        # 5. Return the server PID
-        #
-        # Key: use `&` to background (NOT nohup — nohup fails in osascript).
-        # Redirect stdin/stdout/stderr so the process detaches cleanly.
+        # 3. Start server on 80/443 in background
+        # 4. Verify server started
+        # 5. If failed, roll back hosts entry (no second password prompt)
+        # 6. Flush DNS
+        # 7. Return PID or FAILED
         sudo_script = (
-            # Kill any leftover server processes on 80/443
             f"lsof -ti :80 -sTCP:LISTEN | xargs kill -9 2>/dev/null; "
             f"lsof -ti :443 -sTCP:LISTEN | xargs kill -9 2>/dev/null; "
             f"sleep 0.3; "
-            # Add hosts entry
             f'echo "127.0.0.1 {domain} {HOSTS_MARKER}" >> /etc/hosts; '
-            # Start server in background
             f'"{python_path}" "{hijack_server_path}" '
             f'"{site_dir}" "{cert_path}" "{key_path}" "{self.pid_file}" '
             f'</dev/null >"{log_path}" 2>&1 & '
             f"SERVER_PID=$!; "
-            # Wait for server to bind, then verify it's running
             f"sleep 1; "
             f"if ! kill -0 $SERVER_PID 2>/dev/null; then "
-            # Server died — roll back hosts entry
             f'  sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts; '
             f"  dscacheutil -flushcache; "
             f"  killall -HUP mDNSResponder 2>/dev/null; "
@@ -96,6 +99,8 @@ class SessionManager:
             f"fi"
         )
 
+        log.info("Requesting admin privileges via osascript...")
+
         try:
             result = subprocess.run(
                 [
@@ -106,32 +111,41 @@ class SessionManager:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=120,
             )
         except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Sudo prompt timed out"}
+            log.error("osascript timed out (120s)")
+            return {"success": False, "error": "Sudo prompt timed out (2 minutes). Was the password dialog visible?"}
+
+        log.info("osascript returncode: %s", result.returncode)
+        log.info("osascript stdout: %r", result.stdout.strip())
+        if result.stderr.strip():
+            log.info("osascript stderr: %r", result.stderr.strip())
 
         if result.returncode != 0:
             err = result.stderr.strip()
             if "User canceled" in err or "canceled" in err.lower():
+                log.info("User canceled sudo prompt")
                 return {"success": False, "error": "Sudo canceled by user"}
+            log.error("osascript failed: %s", err)
             return {"success": False, "error": f"Failed to start session: {err}"}
 
         output = result.stdout.strip()
 
         if output == "FAILED":
-            # Server died — hosts already cleaned up by the script
             try:
                 with open(log_path) as f:
-                    log = f.read().strip()[-300:]
+                    server_log = f.read().strip()[-500:]
             except OSError:
-                log = "no log available"
+                server_log = "no log available"
+            log.error("Server failed to start. Server log:\n%s", server_log)
             return {
                 "success": False,
-                "error": f"Server failed to start. Log: {log}",
+                "error": f"Server failed to start. Log: {server_log}",
             }
 
         server_pid = int(output) if output.isdigit() else None
+        log.info("Session started! Server PID: %s", server_pid)
 
         # Save state
         state = {
@@ -160,11 +174,11 @@ class SessionManager:
         domain = status.get("domain", "")
         pid = status.get("server_pid")
 
-        # Privileged cleanup: kill server (root process) + remove hosts + flush DNS
+        log.info("Stopping session for %s (PID %s)", domain, pid)
+
         parts = []
         if pid:
             parts.append(f"kill -9 {pid} 2>/dev/null")
-        # Also kill anything left on 80/443
         parts.append("lsof -ti :80 -sTCP:LISTEN | xargs kill -9 2>/dev/null")
         parts.append("lsof -ti :443 -sTCP:LISTEN | xargs kill -9 2>/dev/null")
         parts.append(f'sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts')
@@ -173,6 +187,8 @@ class SessionManager:
         parts.append('echo "ok"')
 
         sudo_script = "; ".join(parts)
+
+        log.info("Requesting admin privileges for cleanup...")
 
         try:
             result = subprocess.run(
@@ -187,8 +203,11 @@ class SessionManager:
                 timeout=30,
             )
         except subprocess.TimeoutExpired:
+            log.error("Cleanup osascript timed out")
             self._remove_state()
             return {"success": False, "error": "Sudo prompt timed out during cleanup"}
+
+        log.info("Cleanup osascript returncode: %s", result.returncode)
 
         if result.returncode != 0:
             err = result.stderr.strip()
@@ -199,11 +218,11 @@ class SessionManager:
 
         self._remove_state()
 
-        # Record in DB
         from ..models import record_session_end
 
         record_session_end(domain)
 
+        log.info("Session stopped for %s", domain)
         return {"success": True, "domain": domain}
 
     def cleanup_stale(self) -> dict | None:
@@ -224,8 +243,8 @@ class SessionManager:
             try:
                 with open(self.pid_file) as f:
                     pid = int(f.read().strip())
-                # Server runs as root — try SIGKILL (SIGTERM may not work)
                 os.kill(pid, signal.SIGKILL)
+                log.info("Force-killed server PID %s", pid)
             except (OSError, ValueError):
                 pass
 
@@ -234,23 +253,6 @@ class SessionManager:
             "success": True,
             "note": "Server killed. /etc/hosts may need manual cleanup.",
         }
-
-    def _sudo_cleanup_hosts(self):
-        """Remove our hosts entries via osascript. Best-effort."""
-        try:
-            subprocess.run(
-                [
-                    "osascript",
-                    "-e",
-                    f'do shell script "sed -i \\"\\" \\"/{HOSTS_MARKER}/d\\" /etc/hosts; '
-                    f'dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null" '
-                    f"with administrator privileges",
-                ],
-                capture_output=True,
-                timeout=15,
-            )
-        except Exception:
-            pass
 
     def _is_process_running(self, pid: int) -> bool:
         try:
