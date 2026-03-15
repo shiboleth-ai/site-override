@@ -30,6 +30,21 @@ def _session_mgr() -> SessionManager:
     return current_app.config["SESSION_MANAGER"]
 
 
+def _stale_hosts() -> list[str]:
+    """Check /etc/hosts for stale SITE-OVERRIDE entries."""
+    stale = []
+    try:
+        with open("/etc/hosts") as f:
+            for line in f:
+                if HOSTS_MARKER in line:
+                    parts = line.split()
+                    if len(parts) > 1:
+                        stale.append(parts[1])
+    except OSError:
+        pass
+    return stale
+
+
 def _render_index(**extra):
     """Render the dashboard with all required context."""
     return render_template(
@@ -37,6 +52,7 @@ def _render_index(**extra):
         sites=list_sites(current_app.config["SITES_DIR"]),
         session_status=_session_mgr().get_status(),
         mkcert=mkcert_status(),
+        stale_hosts=_stale_hosts(),
         **extra,
     )
 
@@ -436,4 +452,8 @@ def cleanup_hosts():
     mark_sessions_cleaned()
 
     flash("All /etc/hosts entries removed. DNS cache flushed.", "success")
-    return redirect(url_for("main.cleanup"))
+    # Redirect back to where the user came from
+    referrer = request.referrer or ""
+    if "cleanup" in referrer:
+        return redirect(url_for("main.cleanup"))
+    return redirect(url_for("main.index"))

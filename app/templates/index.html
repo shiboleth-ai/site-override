@@ -21,6 +21,34 @@
         </a>
     </div>
 
+    {# ── Stale Hosts Warning ── #}
+    {% if stale_hosts %}
+    <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-2 text-red-700 font-semibold text-sm mb-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                </svg>
+                Stale /etc/hosts entries detected
+            </div>
+            <p class="text-red-600 text-sm">
+                These domains are still redirected to localhost:
+                {% for domain in stale_hosts %}
+                    <code class="bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-mono text-xs">{{ domain }}</code>
+                {% endfor %}
+            </p>
+        </div>
+        <form method="post" action="{{ url_for('main.cleanup_hosts') }}">
+            <button type="submit"
+                    class="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-lg
+                           transition-colors whitespace-nowrap">
+                Clean Up Now
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
     {# ── mkcert Status ── #}
     {% if not mkcert or not mkcert.ca_installed %}
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start justify-between gap-4">
