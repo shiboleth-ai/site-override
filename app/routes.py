@@ -188,7 +188,37 @@ def save_file(domain):
     return '<span class="text-green-600">Saved!</span>'
 
 
-# ── Visual Preview & Editor ────────────────────────────────────────────
+# ── View & Preview ─────────────────────────────────────────────────────
+
+
+@bp.route("/view/<domain>/", defaults={"filepath": "index.html"})
+@bp.route("/view/<domain>/<path:filepath>")
+def view(domain, filepath):
+    """Serve cloned site files cleanly, no editor injection."""
+    site_dir = os.path.join(current_app.config["SITES_DIR"], domain)
+    full_path = os.path.normpath(os.path.join(site_dir, filepath))
+
+    if not full_path.startswith(site_dir):
+        return "Forbidden", 403
+
+    if not os.path.isfile(full_path):
+        for ext in (".html", ".htm"):
+            alt = full_path + ext
+            if os.path.isfile(alt):
+                full_path = alt
+                break
+
+    if not os.path.isfile(full_path):
+        return "File not found", 404
+
+    mime_type, _ = mimetypes.guess_type(full_path)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+
+    with open(full_path, "rb") as f:
+        content = f.read()
+
+    return Response(content, mimetype=mime_type)
 
 
 @bp.route("/preview/<domain>/", defaults={"filepath": "index.html"})
