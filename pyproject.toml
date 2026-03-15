@@ -1,0 +1,17 @@
+[project]
+name = "site-override"
+version = "0.1.0"
+description = "QA tool for cloning, editing, and locally overriding websites"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0",
+    "cryptography>=42.0",
+    "beautifulsoup4>=4.12",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

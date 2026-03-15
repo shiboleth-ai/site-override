@@ -1,0 +1,22 @@
+{% if session_status and session_status.active %}
+<div class="bg-red-700 text-white px-4 py-3 flex items-center justify-between shadow-lg">
+    <div class="flex items-center gap-3">
+        <span class="relative flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-300 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-red-200"></span>
+        </span>
+        <span class="font-semibold text-lg">
+            SESSION ACTIVE
+        </span>
+        <span class="text-red-200">
+            &mdash; <strong>{{ session_status.domain }}</strong> is redirected to your local copy
+        </span>
+    </div>
+    <form hx-post="{{ url_for('main.session_stop') }}" hx-target="body">
+        <button type="submit"
+                class="bg-white text-red-700 font-bold px-6 py-2 rounded-lg hover:bg-red-100 transition-colors text-base shadow">
+            END SESSION
+        </button>
+    </form>
+</div>
+{% endif %}

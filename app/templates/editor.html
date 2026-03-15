@@ -1,0 +1,192 @@
+{% extends 'base.html' %}
+{% block title %}Edit - {{ domain }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/dracula.min.css">
+<style>
+    .editor-layout { display: grid; grid-template-columns: 260px 1fr; height: calc(100vh - 56px); }
+    .file-tree { overflow-y: auto; }
+    .file-item { cursor: pointer; }
+    .file-item:hover { background: rgba(59, 130, 246, 0.1); }
+    .file-item.active { background: rgba(59, 130, 246, 0.2); border-left: 2px solid #3b82f6; }
+    .CodeMirror { height: 100% !important; font-size: 13px; }
+    .preview-frame { width: 100%; height: 100%; border: none; background: white; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# ── Editor Toolbar ── #}
+<div class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between h-14">
+    <div class="flex items-center gap-4">
+        <a href="{{ url_for('main.index') }}"
+           class="text-gray-400 hover:text-white transition-colors flex items-center gap-1 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+            Back
+        </a>
+        <h1 class="text-white font-semibold">{{ domain }}</h1>
+    </div>
+    <div class="flex items-center gap-2">
+        <button onclick="switchView('visual')" id="btn-visual"
+                class="px-3 py-1.5 rounded text-sm font-medium bg-blue-600 text-white transition-colors">
+            Visual Editor
+        </button>
+        <button onclick="switchView('source')" id="btn-source"
+                class="px-3 py-1.5 rounded text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors">
+            Source Editor
+        </button>
+    </div>
+</div>
+
+{# ── Editor Layout ── #}
+<div class="editor-layout">
+    {# ── File Tree Sidebar ── #}
+    <div class="file-tree bg-gray-900 border-r border-gray-800 p-3">
+        <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 px-2">Files</div>
+        <div class="space-y-0.5">
+            {% for file in files %}
+            {% if file.is_dir %}
+            <div class="px-2 py-1 text-gray-500 text-xs font-semibold uppercase tracking-wider"
+                 style="padding-left: {{ file.depth * 16 + 8 }}px">
+                <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                </svg>
+                {{ file.name }}
+            </div>
+            {% else %}
+            <div class="file-item rounded px-2 py-1.5 text-sm text-gray-300 transition-colors
+                        {% if file.path == default_file %}active{% endif %}"
+                 style="padding-left: {{ file.depth * 16 + 8 }}px"
+                 data-path="{{ file.path }}"
+                 onclick="selectFile('{{ file.path }}', this)"
+                 hx-get="{{ url_for('main.get_file', domain=domain, path=file.path) }}"
+                 hx-target="#source-panel"
+                 hx-swap="innerHTML">
+                <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                {{ file.name }}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── Main Content Area ── #}
+    <div class="relative bg-gray-950">
+        {# Visual Editor (iframe with injected overlay) #}
+        <div id="visual-panel" class="absolute inset-0">
+            {% if default_file %}
+            <iframe id="preview-iframe" class="preview-frame"
+                    src="{{ url_for('main.preview', domain=domain, filepath=default_file) }}"></iframe>
+            {% else %}
+            <div class="flex items-center justify-center h-full text-gray-500">
+                Select an HTML file to preview
+            </div>
+            {% endif %}
+        </div>
+
+        {# Source Editor (CodeMirror) #}
+        <div id="source-panel" class="absolute inset-0 hidden overflow-auto">
+            {% if default_file %}
+            <div class="p-4 text-gray-500 text-sm">Click a file to edit its source code</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/css/css.min.js"></script>
+<script>
+    let currentView = 'visual';
+    let currentFile = '{{ default_file or "" }}';
+
+    function switchView(view) {
+        currentView = view;
+        const visual = document.getElementById('visual-panel');
+        const source = document.getElementById('source-panel');
+        const btnVisual = document.getElementById('btn-visual');
+        const btnSource = document.getElementById('btn-source');
+
+        if (view === 'visual') {
+            visual.classList.remove('hidden');
+            source.classList.add('hidden');
+            btnVisual.className = 'px-3 py-1.5 rounded text-sm font-medium bg-blue-600 text-white transition-colors';
+            btnSource.className = 'px-3 py-1.5 rounded text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors';
+        } else {
+            visual.classList.add('hidden');
+            source.classList.remove('hidden');
+            btnSource.className = 'px-3 py-1.5 rounded text-sm font-medium bg-blue-600 text-white transition-colors';
+            btnVisual.className = 'px-3 py-1.5 rounded text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors';
+        }
+    }
+
+    function selectFile(path, el) {
+        currentFile = path;
+
+        // Update active state in file tree
+        document.querySelectorAll('.file-item').forEach(item => item.classList.remove('active'));
+        el.classList.add('active');
+
+        // Update visual preview if it's an HTML file
+        if (path.endsWith('.html') || path.endsWith('.htm')) {
+            const iframe = document.getElementById('preview-iframe');
+            if (iframe) {
+                iframe.src = `/preview/{{ domain }}/` + path;
+            }
+        }
+    }
+
+    // Initialize CodeMirror when source editor content is loaded via htmx
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target.id === 'source-panel') {
+            const textarea = document.getElementById('source-textarea');
+            if (textarea && !textarea._cm) {
+                const mode = textarea.dataset.mode || 'htmlmixed';
+                const cm = CodeMirror.fromTextArea(textarea, {
+                    mode: mode,
+                    theme: 'dracula',
+                    lineNumbers: true,
+                    lineWrapping: true,
+                    indentUnit: 2,
+                    tabSize: 2,
+                });
+                textarea._cm = cm;
+
+                // Wire up save button
+                const saveBtn = document.getElementById('source-save-btn');
+                if (saveBtn) {
+                    saveBtn.addEventListener('click', function() {
+                        cm.save(); // Sync CM content back to textarea
+                        const form = document.getElementById('source-save-form');
+                        if (form) {
+                            htmx.ajax('POST', form.action, {
+                                target: '#save-status',
+                                swap: 'innerHTML',
+                                values: {
+                                    path: form.querySelector('[name=path]').value,
+                                    content: textarea.value
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // Switch to source view automatically
+                if (currentView !== 'source') {
+                    switchView('source');
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

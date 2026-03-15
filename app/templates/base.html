@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Site Override{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen" hx-boost="true">
+
+    {# ── Session Alert Bar ── #}
+    <div id="session-bar" hx-get="{{ url_for('main.session_status') }}" hx-trigger="every 5s" hx-swap="innerHTML">
+        {% include '_session_bar.html' %}
+    </div>
+
+    {# ── Flash Messages ── #}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div id="flash-messages" class="max-w-5xl mx-auto px-4 pt-4 space-y-2">
+        {% for category, message in messages %}
+        <div class="px-4 py-3 rounded-lg text-sm
+            {% if category == 'error' %}bg-red-900/60 border border-red-700 text-red-200
+            {% elif category == 'success' %}bg-green-900/60 border border-green-700 text-green-200
+            {% else %}bg-blue-900/60 border border-blue-700 text-blue-200{% endif %}"
+            onclick="this.remove()">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

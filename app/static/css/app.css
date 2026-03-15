@@ -1,0 +1,13 @@
+/* htmx indicator */
+.htmx-indicator {
+    display: none;
+}
+.htmx-request .htmx-indicator {
+    display: inline-block;
+}
+
+/* Smooth transitions for htmx swaps */
+.htmx-swapping {
+    opacity: 0.5;
+    transition: opacity 0.2s ease-out;
+}
