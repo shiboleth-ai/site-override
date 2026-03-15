@@ -20,7 +20,7 @@ from .models import (
 )
 from .services.certs import generate_cert, install_mkcert, mkcert_status
 from .services.cloner import clone_site, delete_site, get_file_tree, list_sites
-from .services.hijack import SessionManager, HOSTS_MARKER, PFCTL_ANCHOR, _escape_applescript
+from .services.hijack import SessionManager, HOSTS_MARKER, _escape_applescript
 import subprocess
 
 bp = Blueprint("main", __name__)
@@ -400,10 +400,9 @@ def cleanup():
 
 @bp.route("/cleanup/hosts", methods=["POST"])
 def cleanup_hosts():
-    """Remove all SITE-OVERRIDE entries from /etc/hosts and pfctl."""
+    """Remove all SITE-OVERRIDE entries from /etc/hosts."""
     sudo_script = (
         f'sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts; '
-        f'pfctl -a "{PFCTL_ANCHOR}" -F all 2>/dev/null; '
         f"dscacheutil -flushcache; "
         f"killall -HUP mDNSResponder 2>/dev/null; "
         f'echo "ok"'
@@ -436,5 +435,5 @@ def cleanup_hosts():
     # Mark all DB sessions as cleaned
     mark_sessions_cleaned()
 
-    flash("All /etc/hosts entries and pfctl rules removed. DNS cache flushed.", "success")
+    flash("All /etc/hosts entries removed. DNS cache flushed.", "success")
     return redirect(url_for("main.cleanup"))

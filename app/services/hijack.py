@@ -1,11 +1,10 @@
 """
-Session manager: handles /etc/hosts hijacking, pfctl port forwarding,
-and local server lifecycle.
+Session manager: handles /etc/hosts hijacking and local server lifecycle.
 
 Architecture:
-- Server runs as a normal subprocess on ports 8080/8443 (no root needed)
-- osascript handles privileged ops: /etc/hosts, pfctl, DNS flush
-- pfctl redirects 80→8080 and 443→8443 on loopback
+- Server runs as root on ports 80/443 (started via osascript sudo)
+- osascript handles all privileged ops in a single password prompt:
+  hosts file, server launch, DNS flush
 """
 
 import json
@@ -18,15 +17,11 @@ import time
 
 HOSTS_MARKER = "# SITE-OVERRIDE-MANAGED"
 
-# pfctl anchor name for our rules
-PFCTL_ANCHOR = "site-override"
-
 
 class SessionManager:
     def __init__(self, state_file: str, pid_file: str):
         self.state_file = state_file
         self.pid_file = pid_file
-        self._server_process = None
 
     def get_status(self) -> dict:
         """Get current session status."""
@@ -55,58 +50,33 @@ class SessionManager:
                 "error": f"Session already active for {status.get('domain')}. Stop it first.",
             }
 
-        # Step 1: Start the local server as a normal subprocess (no root needed)
         hijack_server_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "hijack_server.py"
         )
+        python_path = sys.executable
+        log_path = os.path.join(os.path.dirname(self.state_file), "server.log")
 
-        try:
-            self._server_process = subprocess.Popen(
-                [
-                    sys.executable,
-                    hijack_server_path,
-                    site_dir,
-                    cert_path,
-                    key_path,
-                    self.pid_file,
-                ],
-                stdout=open(os.path.join(os.path.dirname(self.state_file), "server.log"), "w"),
-                stderr=subprocess.STDOUT,
-                start_new_session=True,  # Detach from parent
-            )
-        except OSError as e:
-            return {"success": False, "error": f"Failed to start server: {e}"}
+        # Pre-create log file as current user (root can still write to it)
+        with open(log_path, "w"):
+            pass
 
-        # Give server a moment to bind ports
-        time.sleep(0.5)
-
-        # Check it's actually running
-        if self._server_process.poll() is not None:
-            return {
-                "success": False,
-                "error": "Server failed to start. Check /tmp/site-override-server.log",
-            }
-
-        server_pid = self._server_process.pid
-
-        # Step 2: Privileged operations via osascript (single password prompt)
-        # - Add /etc/hosts entry
-        # - Set up pfctl port forwarding (80→8080, 443→8443)
-        # - Flush DNS
+        # Single osascript call that does everything as root:
+        # 1. Add /etc/hosts entry
+        # 2. Start server on ports 80/443 in background
+        # 3. Flush DNS
+        # 4. Return the server PID
+        #
+        # Key: use `&` to background (NOT nohup — nohup fails in osascript).
+        # Redirect stdin/stdout/stderr so the process detaches cleanly.
         sudo_script = (
-            # Add hosts entry
             f'echo "127.0.0.1 {domain} {HOSTS_MARKER}" >> /etc/hosts; '
-            # Set up pfctl port forwarding via anchor
-            f'echo "'
-            f"rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port 8080\\n"
-            f"rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 443 -> 127.0.0.1 port 8443"
-            f'" | pfctl -a "{PFCTL_ANCHOR}" -f - 2>/dev/null; '
-            # Enable pfctl (may already be enabled)
-            f"pfctl -E 2>/dev/null; "
-            # Flush DNS
+            f'"{python_path}" "{hijack_server_path}" '
+            f'"{site_dir}" "{cert_path}" "{key_path}" "{self.pid_file}" '
+            f'</dev/null >"{log_path}" 2>&1 & '
+            f"SERVER_PID=$!; "
             f"dscacheutil -flushcache; "
             f"killall -HUP mDNSResponder 2>/dev/null; "
-            f'echo "ok"'
+            f"echo $SERVER_PID"
         )
 
         try:
@@ -122,17 +92,32 @@ class SessionManager:
                 timeout=60,
             )
         except subprocess.TimeoutExpired:
-            # Kill the server we started
-            self._kill_server(server_pid)
             return {"success": False, "error": "Sudo prompt timed out"}
 
         if result.returncode != 0:
-            # Kill the server we started
-            self._kill_server(server_pid)
             err = result.stderr.strip()
             if "User canceled" in err or "canceled" in err.lower():
                 return {"success": False, "error": "Sudo canceled by user"}
-            return {"success": False, "error": f"Failed to set up network: {err}"}
+            return {"success": False, "error": f"Failed to start session: {err}"}
+
+        server_pid_str = result.stdout.strip()
+        server_pid = int(server_pid_str) if server_pid_str.isdigit() else None
+
+        # Give server a moment to bind ports, then verify
+        time.sleep(0.5)
+        if server_pid and not self._is_process_running(server_pid):
+            # Server died — read log for details
+            try:
+                with open(log_path) as f:
+                    log = f.read().strip()[-300:]
+            except OSError:
+                log = "no log available"
+            # Clean up hosts entry
+            self._sudo_cleanup_hosts()
+            return {
+                "success": False,
+                "error": f"Server failed to start (PID {server_pid}). Log: {log}",
+            }
 
         # Save state
         state = {
@@ -161,20 +146,16 @@ class SessionManager:
         domain = status.get("domain", "")
         pid = status.get("server_pid")
 
-        # Step 1: Kill the server process (no root needed)
-        self._kill_server(pid)
+        # Privileged cleanup: kill server (root process) + remove hosts + flush DNS
+        parts = []
+        if pid:
+            parts.append(f"kill {pid} 2>/dev/null")
+        parts.append(f'sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts')
+        parts.append("dscacheutil -flushcache")
+        parts.append("killall -HUP mDNSResponder 2>/dev/null")
+        parts.append('echo "ok"')
 
-        # Step 2: Privileged cleanup via osascript
-        sudo_script = (
-            # Remove hosts entry
-            f'sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts; '
-            # Remove pfctl anchor rules
-            f'pfctl -a "{PFCTL_ANCHOR}" -F all 2>/dev/null; '
-            # Flush DNS
-            f"dscacheutil -flushcache; "
-            f"killall -HUP mDNSResponder 2>/dev/null; "
-            f'echo "ok"'
-        )
+        sudo_script = "; ".join(parts)
 
         try:
             result = subprocess.run(
@@ -222,57 +203,37 @@ class SessionManager:
 
     def force_cleanup(self) -> dict:
         """Emergency cleanup on app exit. Kills server, warns about hosts."""
-        # Kill server process (no root needed)
         if os.path.exists(self.pid_file):
             try:
                 with open(self.pid_file) as f:
                     pid = int(f.read().strip())
-                self._kill_server(pid)
+                # Server runs as root, so we need sudo to kill it
+                # In signal handler context, osascript won't work, so try anyway
+                os.kill(pid, signal.SIGTERM)
             except (OSError, ValueError):
                 pass
-
-        if self._server_process:
-            try:
-                self._server_process.terminate()
-                self._server_process.wait(timeout=3)
-            except Exception:
-                try:
-                    self._server_process.kill()
-                except Exception:
-                    pass
 
         self._remove_state()
         return {
             "success": True,
-            "note": "Server killed. /etc/hosts and pfctl may need manual cleanup.",
+            "note": "Server killed. /etc/hosts may need manual cleanup.",
         }
 
-    def _kill_server(self, pid):
-        """Kill a server process by PID."""
-        if not pid:
-            return
+    def _sudo_cleanup_hosts(self):
+        """Remove our hosts entries via osascript. Best-effort."""
         try:
-            os.kill(pid, signal.SIGTERM)
-            # Wait briefly for clean shutdown
-            for _ in range(10):
-                time.sleep(0.1)
-                try:
-                    os.kill(pid, 0)
-                except OSError:
-                    break
-            else:
-                # Force kill if still running
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except OSError:
-                    pass
-        except OSError:
-            pass
-
-        # Clean up PID file
-        try:
-            os.unlink(self.pid_file)
-        except OSError:
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    f'do shell script "sed -i \\"\\" \\"/{HOSTS_MARKER}/d\\" /etc/hosts; '
+                    f'dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null" '
+                    f"with administrator privileges",
+                ],
+                capture_output=True,
+                timeout=15,
+            )
+        except Exception:
             pass
 
     def _is_process_running(self, pid: int) -> bool:
