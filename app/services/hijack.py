@@ -61,22 +61,39 @@ class SessionManager:
             pass
 
         # Single osascript call that does everything as root:
-        # 1. Add /etc/hosts entry
-        # 2. Start server on ports 80/443 in background
-        # 3. Flush DNS
-        # 4. Return the server PID
+        # 1. Kill any zombie servers left on 80/443
+        # 2. Add /etc/hosts entry
+        # 3. Start server on ports 80/443 in background
+        # 4. Flush DNS
+        # 5. Return the server PID
         #
         # Key: use `&` to background (NOT nohup — nohup fails in osascript).
         # Redirect stdin/stdout/stderr so the process detaches cleanly.
         sudo_script = (
+            # Kill any leftover server processes on 80/443
+            f"lsof -ti :80 -sTCP:LISTEN | xargs kill -9 2>/dev/null; "
+            f"lsof -ti :443 -sTCP:LISTEN | xargs kill -9 2>/dev/null; "
+            f"sleep 0.3; "
+            # Add hosts entry
             f'echo "127.0.0.1 {domain} {HOSTS_MARKER}" >> /etc/hosts; '
+            # Start server in background
             f'"{python_path}" "{hijack_server_path}" '
             f'"{site_dir}" "{cert_path}" "{key_path}" "{self.pid_file}" '
             f'</dev/null >"{log_path}" 2>&1 & '
             f"SERVER_PID=$!; "
-            f"dscacheutil -flushcache; "
-            f"killall -HUP mDNSResponder 2>/dev/null; "
-            f"echo $SERVER_PID"
+            # Wait for server to bind, then verify it's running
+            f"sleep 1; "
+            f"if ! kill -0 $SERVER_PID 2>/dev/null; then "
+            # Server died — roll back hosts entry
+            f'  sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts; '
+            f"  dscacheutil -flushcache; "
+            f"  killall -HUP mDNSResponder 2>/dev/null; "
+            f'  echo "FAILED"; '
+            f"else "
+            f"  dscacheutil -flushcache; "
+            f"  killall -HUP mDNSResponder 2>/dev/null; "
+            f"  echo $SERVER_PID; "
+            f"fi"
         )
 
         try:
@@ -100,24 +117,21 @@ class SessionManager:
                 return {"success": False, "error": "Sudo canceled by user"}
             return {"success": False, "error": f"Failed to start session: {err}"}
 
-        server_pid_str = result.stdout.strip()
-        server_pid = int(server_pid_str) if server_pid_str.isdigit() else None
+        output = result.stdout.strip()
 
-        # Give server a moment to bind ports, then verify
-        time.sleep(0.5)
-        if server_pid and not self._is_process_running(server_pid):
-            # Server died — read log for details
+        if output == "FAILED":
+            # Server died — hosts already cleaned up by the script
             try:
                 with open(log_path) as f:
                     log = f.read().strip()[-300:]
             except OSError:
                 log = "no log available"
-            # Clean up hosts entry
-            self._sudo_cleanup_hosts()
             return {
                 "success": False,
-                "error": f"Server failed to start (PID {server_pid}). Log: {log}",
+                "error": f"Server failed to start. Log: {log}",
             }
+
+        server_pid = int(output) if output.isdigit() else None
 
         # Save state
         state = {
@@ -149,7 +163,10 @@ class SessionManager:
         # Privileged cleanup: kill server (root process) + remove hosts + flush DNS
         parts = []
         if pid:
-            parts.append(f"kill {pid} 2>/dev/null")
+            parts.append(f"kill -9 {pid} 2>/dev/null")
+        # Also kill anything left on 80/443
+        parts.append("lsof -ti :80 -sTCP:LISTEN | xargs kill -9 2>/dev/null")
+        parts.append("lsof -ti :443 -sTCP:LISTEN | xargs kill -9 2>/dev/null")
         parts.append(f'sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts')
         parts.append("dscacheutil -flushcache")
         parts.append("killall -HUP mDNSResponder 2>/dev/null")
@@ -207,9 +224,8 @@ class SessionManager:
             try:
                 with open(self.pid_file) as f:
                     pid = int(f.read().strip())
-                # Server runs as root, so we need sudo to kill it
-                # In signal handler context, osascript won't work, so try anyway
-                os.kill(pid, signal.SIGTERM)
+                # Server runs as root — try SIGKILL (SIGTERM may not work)
+                os.kill(pid, signal.SIGKILL)
             except (OSError, ValueError):
                 pass
 
