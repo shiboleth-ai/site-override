@@ -70,7 +70,7 @@ class SessionManager:
                     key_path,
                     self.pid_file,
                 ],
-                stdout=open("/tmp/site-override-server.log", "w"),
+                stdout=open(os.path.join(os.path.dirname(self.state_file), "server.log"), "w"),
                 stderr=subprocess.STDOUT,
                 start_new_session=True,  # Detach from parent
             )
