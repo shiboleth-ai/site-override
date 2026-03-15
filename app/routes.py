@@ -24,15 +24,23 @@ def _session_mgr() -> SessionManager:
     return current_app.config["SESSION_MANAGER"]
 
 
+def _render_index(**extra):
+    """Render the dashboard with all required context."""
+    return render_template(
+        "index.html",
+        sites=list_sites(current_app.config["SITES_DIR"]),
+        session_status=_session_mgr().get_status(),
+        mkcert=mkcert_status(),
+        **extra,
+    )
+
+
 # ── Dashboard ──────────────────────────────────────────────────────────
 
 
 @bp.route("/")
 def index():
-    sites = list_sites(current_app.config["SITES_DIR"])
-    status = _session_mgr().get_status()
-    mkcert = mkcert_status()
-    return render_template("index.html", sites=sites, session_status=status, mkcert=mkcert)
+    return _render_index()
 
 
 # ── Clone ──────────────────────────────────────────────────────────────
@@ -52,11 +60,6 @@ def clone():
     else:
         flash(result["error"], "error")
 
-    # Return full page for htmx or redirect
-    if request.headers.get("HX-Request"):
-        sites = list_sites(current_app.config["SITES_DIR"])
-        status = _session_mgr().get_status()
-        return render_template("index.html", sites=sites, session_status=status)
     return redirect(url_for("main.index"))
 
 
@@ -71,10 +74,6 @@ def site_delete(domain):
     else:
         flash(result["error"], "error")
 
-    if request.headers.get("HX-Request"):
-        sites = list_sites(current_app.config["SITES_DIR"])
-        status = _session_mgr().get_status()
-        return render_template("index.html", sites=sites, session_status=status)
     return redirect(url_for("main.index"))
 
 
@@ -164,7 +163,7 @@ def save_file(domain):
     with open(full_path, "w") as f:
         f.write(content)
 
-    return '<span class="text-green-400">Saved!</span>'
+    return '<span class="text-green-600">Saved!</span>'
 
 
 # ── Visual Preview & Editor ────────────────────────────────────────────
@@ -320,10 +319,6 @@ def session_start():
     else:
         flash(result["error"], "error")
 
-    if request.headers.get("HX-Request"):
-        sites = list_sites(current_app.config["SITES_DIR"])
-        status = _session_mgr().get_status()
-        return render_template("index.html", sites=sites, session_status=status)
     return redirect(url_for("main.index"))
 
 
@@ -336,10 +331,6 @@ def session_stop():
     else:
         flash(result["error"], "error")
 
-    if request.headers.get("HX-Request"):
-        sites = list_sites(current_app.config["SITES_DIR"])
-        status = _session_mgr().get_status()
-        return render_template("index.html", sites=sites, session_status=status)
     return redirect(url_for("main.index"))
 
 
@@ -368,9 +359,4 @@ def mkcert_setup():
     else:
         flash(result["error"], "error")
 
-    if request.headers.get("HX-Request"):
-        sites = list_sites(current_app.config["SITES_DIR"])
-        status = _session_mgr().get_status()
-        mkcert = mkcert_status()
-        return render_template("index.html", sites=sites, session_status=status, mkcert=mkcert)
     return redirect(url_for("main.index"))

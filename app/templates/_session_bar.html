@@ -1,5 +1,6 @@
 {% if session_status and session_status.active %}
-<div class="bg-red-700 text-white px-4 py-3 flex items-center justify-between shadow-lg">
+<div class="bg-red-600 text-white px-4 py-3 flex items-center justify-between shadow-md"
+     hx-get="{{ url_for('main.session_status') }}" hx-trigger="every 10s" hx-target="#session-bar" hx-swap="innerHTML">
     <div class="flex items-center gap-3">
         <span class="relative flex h-3 w-3">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-300 opacity-75"></span>
@@ -8,15 +9,17 @@
         <span class="font-semibold text-lg">
             SESSION ACTIVE
         </span>
-        <span class="text-red-200">
+        <span class="text-red-100">
             &mdash; <strong>{{ session_status.domain }}</strong> is redirected to your local copy
         </span>
     </div>
-    <form hx-post="{{ url_for('main.session_stop') }}" hx-target="body">
+    <form method="post" action="{{ url_for('main.session_stop') }}">
         <button type="submit"
                 class="bg-white text-red-700 font-bold px-6 py-2 rounded-lg hover:bg-red-100 transition-colors text-base shadow">
             END SESSION
         </button>
     </form>
 </div>
+{% else %}
+{# No session active — no polling #}
 {% endif %}

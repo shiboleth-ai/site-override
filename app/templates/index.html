@@ -6,42 +6,36 @@
 
     {# ── Header ── #}
     <div class="mb-8">
-        <h1 class="text-3xl font-bold text-white tracking-tight">Site Override</h1>
-        <p class="text-gray-400 mt-1">Clone websites, edit content, and redirect locally for QA testing</p>
+        <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Site Override</h1>
+        <p class="text-gray-500 mt-1">Clone websites, edit content, and redirect locally for QA testing</p>
     </div>
 
     {# ── mkcert Status ── #}
     {% if not mkcert or not mkcert.ca_installed %}
-    <div class="bg-amber-950/50 border border-amber-800/60 rounded-xl p-4 mb-6 flex items-start justify-between gap-4">
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start justify-between gap-4">
         <div>
-            <div class="flex items-center gap-2 text-amber-300 font-semibold text-sm mb-1">
+            <div class="flex items-center gap-2 text-amber-700 font-semibold text-sm mb-1">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
                 </svg>
                 mkcert not configured
             </div>
-            <p class="text-amber-200/70 text-sm">
+            <p class="text-amber-600 text-sm">
                 Without mkcert, hijacked HTTPS sites will show a browser certificate warning.
                 Set up mkcert for seamless, warning-free HTTPS.
             </p>
         </div>
-        <form hx-post="{{ url_for('main.mkcert_setup') }}" hx-target="body" hx-indicator="#mkcert-spinner">
+        <form method="post" action="{{ url_for('main.mkcert_setup') }}">
             <button type="submit"
-                    class="bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold px-4 py-2 rounded-lg
-                           transition-colors whitespace-nowrap flex items-center gap-2">
+                    class="bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-lg
+                           transition-colors whitespace-nowrap">
                 Install mkcert
-                <span id="mkcert-spinner" class="htmx-indicator">
-                    <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                    </svg>
-                </span>
             </button>
         </form>
     </div>
     {% else %}
-    <div class="bg-green-950/30 border border-green-800/40 rounded-xl px-4 py-3 mb-6 flex items-center gap-2 text-sm text-green-400">
+    <div class="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-6 flex items-center gap-2 text-sm text-green-700">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
         </svg>
@@ -50,51 +44,45 @@
     {% endif %}
 
     {# ── Clone Form ── #}
-    <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 mb-8">
-        <h2 class="text-lg font-semibold text-white mb-4">Clone a Website</h2>
-        <form hx-post="{{ url_for('main.clone') }}" hx-target="body" hx-indicator="#clone-spinner"
-              class="flex gap-3">
-            <input type="url" name="url" required
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Clone a Website</h2>
+        <form method="post" action="{{ url_for('main.clone') }}" class="flex gap-3">
+            <input type="text" name="url" required
                    placeholder="https://example.com"
-                   class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white
-                          placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                   class="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-4 py-3 text-gray-900
+                          placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
             <button type="submit"
-                    class="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-lg
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg
                            transition-colors flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                 </svg>
                 Clone
-                <span id="clone-spinner" class="htmx-indicator">
-                    <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                    </svg>
-                </span>
             </button>
         </form>
-        <p class="text-gray-500 text-sm mt-2">
-            Uses <code class="text-gray-400">wget --mirror</code> to download the site. Requires wget (<code class="text-gray-400">brew install wget</code>).
+        <p class="text-gray-400 text-sm mt-2">
+            Uses <code class="text-gray-500 bg-gray-100 px-1 rounded">wget --mirror</code> to download the site.
+            Requires wget (<code class="text-gray-500 bg-gray-100 px-1 rounded">brew install wget</code>).
         </p>
     </div>
 
     {# ── Cloned Sites List ── #}
     <div>
-        <h2 class="text-lg font-semibold text-white mb-4">Cloned Sites</h2>
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Cloned Sites</h2>
         {% if sites %}
         <div class="grid gap-4">
             {% for site in sites %}
-            <div class="bg-gray-900 rounded-xl border border-gray-800 p-5 flex items-center justify-between
-                        hover:border-gray-700 transition-colors">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center justify-between
+                        hover:border-gray-300 transition-colors">
                 <div>
-                    <h3 class="text-white font-semibold text-lg">{{ site.domain }}</h3>
-                    <p class="text-gray-500 text-sm mt-1">{{ site.path }}</p>
+                    <h3 class="text-gray-900 font-semibold text-lg">{{ site.domain }}</h3>
+                    <p class="text-gray-400 text-sm mt-1 font-mono">{{ site.path }}</p>
                 </div>
                 <div class="flex items-center gap-3">
                     {# Edit button #}
                     <a href="{{ url_for('main.editor', domain=site.domain) }}"
-                       class="bg-gray-800 hover:bg-gray-700 text-gray-200 px-4 py-2 rounded-lg
+                       class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg
                               transition-colors flex items-center gap-2 text-sm font-medium">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -105,13 +93,13 @@
 
                     {# Start Session button #}
                     {% if session_status and session_status.active and session_status.domain == site.domain %}
-                        <span class="text-red-400 text-sm font-medium px-4 py-2">Session Active</span>
+                        <span class="text-red-500 text-sm font-medium px-4 py-2">Session Active</span>
                     {% else %}
-                        <form hx-post="{{ url_for('main.session_start') }}" hx-target="body">
+                        <form method="post" action="{{ url_for('main.session_start') }}">
                             <input type="hidden" name="domain" value="{{ site.domain }}">
                             <button type="submit"
                                     {% if session_status and session_status.active %}disabled{% endif %}
-                                    class="bg-amber-600 hover:bg-amber-500 disabled:bg-gray-700 disabled:text-gray-500
+                                    class="bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400
                                            text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2
                                            text-sm font-medium">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -124,10 +112,10 @@
                     {% endif %}
 
                     {# Delete button #}
-                    <form hx-post="{{ url_for('main.site_delete', domain=site.domain) }}" hx-target="body"
-                          hx-confirm="Delete {{ site.domain }}? This cannot be undone.">
+                    <form method="post" action="{{ url_for('main.site_delete', domain=site.domain) }}"
+                          onsubmit="return confirm('Delete {{ site.domain }}? This cannot be undone.')">
                         <button type="submit"
-                                class="bg-gray-800 hover:bg-red-900 text-gray-400 hover:text-red-300
+                                class="bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-500
                                        p-2 rounded-lg transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -140,31 +128,31 @@
             {% endfor %}
         </div>
         {% else %}
-        <div class="bg-gray-900 rounded-xl border border-gray-800 p-12 text-center">
-            <svg class="w-12 h-12 text-gray-700 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-12 text-center">
+            <svg class="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                       d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
             </svg>
-            <p class="text-gray-500 text-lg">No sites cloned yet</p>
-            <p class="text-gray-600 text-sm mt-1">Enter a URL above to get started</p>
+            <p class="text-gray-400 text-lg">No sites cloned yet</p>
+            <p class="text-gray-400 text-sm mt-1">Enter a URL above to get started</p>
         </div>
         {% endif %}
     </div>
 
     {# ── How It Works ── #}
-    <div class="mt-12 bg-gray-900/50 rounded-xl border border-gray-800/50 p-6">
+    <div class="mt-12 bg-white rounded-xl border border-gray-200 shadow-sm p-6">
         <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">How It Works</h3>
         <div class="grid md:grid-cols-3 gap-6 text-sm">
             <div>
-                <div class="text-blue-400 font-semibold mb-1">1. Clone</div>
+                <div class="text-blue-600 font-semibold mb-1">1. Clone</div>
                 <p class="text-gray-500">Enter a URL and we'll mirror the site locally using wget.</p>
             </div>
             <div>
-                <div class="text-blue-400 font-semibold mb-1">2. Edit</div>
+                <div class="text-blue-600 font-semibold mb-1">2. Edit</div>
                 <p class="text-gray-500">Use the visual editor to click and change text, or switch to source view for full control.</p>
             </div>
             <div>
-                <div class="text-blue-400 font-semibold mb-1">3. Hijack</div>
+                <div class="text-blue-600 font-semibold mb-1">3. Hijack</div>
                 <p class="text-gray-500">Start a session to redirect the domain to your local copy via /etc/hosts. End the session when done.</p>
             </div>
         </div>

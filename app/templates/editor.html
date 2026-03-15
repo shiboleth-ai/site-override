@@ -3,13 +3,12 @@
 
 {% block head %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/dracula.min.css">
 <style>
     .editor-layout { display: grid; grid-template-columns: 260px 1fr; height: calc(100vh - 56px); }
     .file-tree { overflow-y: auto; }
     .file-item { cursor: pointer; }
-    .file-item:hover { background: rgba(59, 130, 246, 0.1); }
-    .file-item.active { background: rgba(59, 130, 246, 0.2); border-left: 2px solid #3b82f6; }
+    .file-item:hover { background: #eff6ff; }
+    .file-item.active { background: #dbeafe; border-left: 2px solid #3b82f6; }
     .CodeMirror { height: 100% !important; font-size: 13px; }
     .preview-frame { width: 100%; height: 100%; border: none; background: white; }
 </style>
@@ -17,16 +16,16 @@
 
 {% block content %}
 {# ── Editor Toolbar ── #}
-<div class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between h-14">
+<div class="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between h-14 shadow-sm">
     <div class="flex items-center gap-4">
         <a href="{{ url_for('main.index') }}"
-           class="text-gray-400 hover:text-white transition-colors flex items-center gap-1 text-sm">
+           class="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
             </svg>
             Back
         </a>
-        <h1 class="text-white font-semibold">{{ domain }}</h1>
+        <h1 class="text-gray-900 font-semibold">{{ domain }}</h1>
     </div>
     <div class="flex items-center gap-2">
         <button onclick="switchView('visual')" id="btn-visual"
@@ -34,7 +33,7 @@
             Visual Editor
         </button>
         <button onclick="switchView('source')" id="btn-source"
-                class="px-3 py-1.5 rounded text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors">
+                class="px-3 py-1.5 rounded text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
             Source Editor
         </button>
     </div>
@@ -43,12 +42,12 @@
 {# ── Editor Layout ── #}
 <div class="editor-layout">
     {# ── File Tree Sidebar ── #}
-    <div class="file-tree bg-gray-900 border-r border-gray-800 p-3">
-        <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-3 px-2">Files</div>
+    <div class="file-tree bg-white border-r border-gray-200 p-3">
+        <div class="text-xs text-gray-400 uppercase tracking-wider font-semibold mb-3 px-2">Files</div>
         <div class="space-y-0.5">
             {% for file in files %}
             {% if file.is_dir %}
-            <div class="px-2 py-1 text-gray-500 text-xs font-semibold uppercase tracking-wider"
+            <div class="px-2 py-1 text-gray-400 text-xs font-semibold uppercase tracking-wider"
                  style="padding-left: {{ file.depth * 16 + 8 }}px">
                 <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -57,7 +56,7 @@
                 {{ file.name }}
             </div>
             {% else %}
-            <div class="file-item rounded px-2 py-1.5 text-sm text-gray-300 transition-colors
+            <div class="file-item rounded px-2 py-1.5 text-sm text-gray-600 transition-colors
                         {% if file.path == default_file %}active{% endif %}"
                  style="padding-left: {{ file.depth * 16 + 8 }}px"
                  data-path="{{ file.path }}"
@@ -65,7 +64,7 @@
                  hx-get="{{ url_for('main.get_file', domain=domain, path=file.path) }}"
                  hx-target="#source-panel"
                  hx-swap="innerHTML">
-                <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 inline mr-1 -mt-0.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
@@ -77,14 +76,14 @@
     </div>
 
     {# ── Main Content Area ── #}
-    <div class="relative bg-gray-950">
+    <div class="relative bg-gray-50">
         {# Visual Editor (iframe with injected overlay) #}
         <div id="visual-panel" class="absolute inset-0">
             {% if default_file %}
             <iframe id="preview-iframe" class="preview-frame"
                     src="{{ url_for('main.preview', domain=domain, filepath=default_file) }}"></iframe>
             {% else %}
-            <div class="flex items-center justify-center h-full text-gray-500">
+            <div class="flex items-center justify-center h-full text-gray-400">
                 Select an HTML file to preview
             </div>
             {% endif %}
@@ -93,7 +92,7 @@
         {# Source Editor (CodeMirror) #}
         <div id="source-panel" class="absolute inset-0 hidden overflow-auto">
             {% if default_file %}
-            <div class="p-4 text-gray-500 text-sm">Click a file to edit its source code</div>
+            <div class="p-4 text-gray-400 text-sm">Click a file to edit its source code</div>
             {% endif %}
         </div>
     </div>
@@ -121,12 +120,12 @@
             visual.classList.remove('hidden');
             source.classList.add('hidden');
             btnVisual.className = 'px-3 py-1.5 rounded text-sm font-medium bg-blue-600 text-white transition-colors';
-            btnSource.className = 'px-3 py-1.5 rounded text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors';
+            btnSource.className = 'px-3 py-1.5 rounded text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors';
         } else {
             visual.classList.add('hidden');
             source.classList.remove('hidden');
             btnSource.className = 'px-3 py-1.5 rounded text-sm font-medium bg-blue-600 text-white transition-colors';
-            btnVisual.className = 'px-3 py-1.5 rounded text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors';
+            btnVisual.className = 'px-3 py-1.5 rounded text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors';
         }
     }
 
@@ -154,7 +153,7 @@
                 const mode = textarea.dataset.mode || 'htmlmixed';
                 const cm = CodeMirror.fromTextArea(textarea, {
                     mode: mode,
-                    theme: 'dracula',
+                    theme: 'default',
                     lineNumbers: true,
                     lineWrapping: true,
                     indentUnit: 2,
@@ -166,7 +165,7 @@
                 const saveBtn = document.getElementById('source-save-btn');
                 if (saveBtn) {
                     saveBtn.addEventListener('click', function() {
-                        cm.save(); // Sync CM content back to textarea
+                        cm.save();
                         const form = document.getElementById('source-save-form');
                         if (form) {
                             htmx.ajax('POST', form.action, {
