@@ -56,4 +56,4 @@ with app.app_context():
 if __name__ == "__main__":
     print("[site-override] Starting on http://127.0.0.1:5000")
     print("[site-override] Press Ctrl+C to quit (active sessions will be cleaned up)")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
