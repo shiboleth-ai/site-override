@@ -80,6 +80,7 @@ The domain goes back to serving the real site.
 - **Manual cleanup** — If something goes wrong, run:
   ```bash
   sudo sed -i "" "/# SITE-OVERRIDE-MANAGED/d" /etc/hosts
+  sudo pfctl -a "site-override" -F all 2>/dev/null
   sudo dscacheutil -flushcache
   sudo killall -HUP mDNSResponder
   ```

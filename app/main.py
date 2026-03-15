@@ -22,8 +22,9 @@ def cleanup(signum=None, frame=None):
         if result.get("note"):
             print(f"[site-override] {result['note']}")
             print(
-                "[site-override] To manually clean /etc/hosts, run:\n"
+                "[site-override] To manually clean up, run:\n"
                 '  sudo sed -i "" "/# SITE-OVERRIDE-MANAGED/d" /etc/hosts && '
+                'sudo pfctl -a "site-override" -F all 2>/dev/null && '
                 "sudo dscacheutil -flushcache && "
                 "sudo killall -HUP mDNSResponder"
             )

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Standalone HTTP/HTTPS file server for serving cloned sites.
-Runs with elevated privileges (port 80/443).
-Launched by SessionManager via osascript sudo.
+Runs as a normal subprocess on high ports (8080/8443).
+Port forwarding (80→8080, 443→8443) is handled by pfctl separately.
 
 Usage: python hijack_server.py <site_dir> <cert_path> <key_path> <pid_file>
 """
@@ -16,13 +16,9 @@ import threading
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
-    """HTTP handler that serves from a specific directory and suppresses logs."""
-
-    def __init__(self, *args, directory=None, **kwargs):
-        super().__init__(*args, directory=directory, **kwargs)
+    """HTTP handler that suppresses access logs."""
 
     def log_message(self, format, *args):
-        # Log to file instead of stderr
         pass
 
 
@@ -55,35 +51,37 @@ def run():
         f.write(str(os.getpid()))
 
     handler_class = make_handler(site_dir)
-
     servers = []
 
-    # HTTP server on port 80
+    # HTTP server on port 8080 (pfctl redirects 80 → 8080)
     try:
-        http_server = http.server.HTTPServer(("127.0.0.1", 80), handler_class)
-        servers.append(http_server)
+        http_server = http.server.HTTPServer(("127.0.0.1", 8080), handler_class)
+        servers.append(("HTTP :8080", http_server))
     except OSError as e:
-        print(f"Warning: Could not bind port 80: {e}")
+        print(f"Warning: Could not bind port 8080: {e}")
 
-    # HTTPS server on port 443
+    # HTTPS server on port 8443 (pfctl redirects 443 → 8443)
     try:
-        https_server = http.server.HTTPServer(("127.0.0.1", 443), handler_class)
+        https_server = http.server.HTTPServer(("127.0.0.1", 8443), handler_class)
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(cert_path, key_path)
         https_server.socket = context.wrap_socket(
             https_server.socket, server_side=True
         )
-        servers.append(https_server)
+        servers.append(("HTTPS :8443", https_server))
     except OSError as e:
-        print(f"Warning: Could not bind port 443: {e}")
+        print(f"Warning: Could not bind port 8443: {e}")
 
     if not servers:
         print("Error: Could not bind to any port")
         cleanup_pid(pid_file)
         sys.exit(1)
 
+    for name, _ in servers:
+        print(f"Serving on {name}")
+
     def shutdown(signum, frame):
-        for s in servers:
+        for _, s in servers:
             s.shutdown()
         cleanup_pid(pid_file)
         sys.exit(0)
@@ -92,7 +90,7 @@ def run():
     signal.signal(signal.SIGINT, shutdown)
 
     threads = []
-    for server in servers:
+    for _, server in servers:
         t = threading.Thread(target=server.serve_forever, daemon=True)
         t.start()
         threads.append(t)
