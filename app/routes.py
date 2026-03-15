@@ -13,9 +13,15 @@ from flask import (
     url_for,
 )
 
+from .models import (
+    get_active_sessions,
+    get_session_history,
+    mark_sessions_cleaned,
+)
 from .services.certs import generate_cert, install_mkcert, mkcert_status
 from .services.cloner import clone_site, delete_site, get_file_tree, list_sites
-from .services.hijack import SessionManager
+from .services.hijack import SessionManager, HOSTS_MARKER, PFCTL_ANCHOR, _escape_applescript
+import subprocess
 
 bp = Blueprint("main", __name__)
 
@@ -360,3 +366,75 @@ def mkcert_setup():
         flash(result["error"], "error")
 
     return redirect(url_for("main.index"))
+
+
+# ── Cleanup ────────────────────────────────────────────────────────────
+
+
+@bp.route("/cleanup")
+def cleanup():
+    """Show cleanup page with session history and stale host detection."""
+    active_db = get_active_sessions()
+    history = get_session_history()
+
+    # Check /etc/hosts for any stale entries
+    stale_hosts = []
+    try:
+        with open("/etc/hosts") as f:
+            for line in f:
+                if HOSTS_MARKER in line:
+                    parts = line.split()
+                    domain = parts[1] if len(parts) > 1 else "unknown"
+                    stale_hosts.append(domain)
+    except OSError:
+        pass
+
+    return render_template(
+        "cleanup.html",
+        active_db=active_db,
+        history=history,
+        stale_hosts=stale_hosts,
+        session_status=_session_mgr().get_status(),
+    )
+
+
+@bp.route("/cleanup/hosts", methods=["POST"])
+def cleanup_hosts():
+    """Remove all SITE-OVERRIDE entries from /etc/hosts and pfctl."""
+    sudo_script = (
+        f'sed -i "" "/{HOSTS_MARKER}/d" /etc/hosts; '
+        f'pfctl -a "{PFCTL_ANCHOR}" -F all 2>/dev/null; '
+        f"dscacheutil -flushcache; "
+        f"killall -HUP mDNSResponder 2>/dev/null; "
+        f'echo "ok"'
+    )
+
+    try:
+        result = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                f'do shell script "{_escape_applescript(sudo_script)}" '
+                f"with administrator privileges",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        flash("Sudo prompt timed out", "error")
+        return redirect(url_for("main.cleanup"))
+
+    if result.returncode != 0:
+        err = result.stderr.strip()
+        if "canceled" in err.lower():
+            flash("Sudo canceled", "error")
+        else:
+            flash(f"Cleanup failed: {err}", "error")
+        return redirect(url_for("main.cleanup"))
+
+    # Mark all DB sessions as cleaned
+    mark_sessions_cleaned()
+
+    flash("All /etc/hosts entries and pfctl rules removed. DNS cache flushed.", "success")
+    return redirect(url_for("main.cleanup"))

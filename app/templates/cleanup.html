@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% block title %}Site Override - Cleanup{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-8">
+
+    {# ── Header ── #}
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 tracking-tight">Cleanup</h1>
+            <p class="text-gray-500 mt-1">Manage stale hosts entries and view session history</p>
+        </div>
+        <a href="{{ url_for('main.index') }}"
+           class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors text-sm font-medium">
+            Back to Dashboard
+        </a>
+    </div>
+
+    {# ── Stale /etc/hosts Entries ── #}
+    {% if stale_hosts %}
+    <div class="bg-red-50 border border-red-200 rounded-xl p-6 mb-8">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-semibold text-red-800 mb-2 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                    </svg>
+                    Stale /etc/hosts entries found
+                </h2>
+                <p class="text-red-700 text-sm mb-3">
+                    These domains are still redirected to 127.0.0.1 in your /etc/hosts file.
+                    This may be from a crashed session or incomplete cleanup.
+                </p>
+                <div class="space-y-1">
+                    {% for domain in stale_hosts %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <code class="bg-red-100 text-red-800 px-2 py-0.5 rounded font-mono">127.0.0.1 {{ domain }}</code>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <form method="post" action="{{ url_for('main.cleanup_hosts') }}">
+                <button type="submit"
+                        class="bg-red-600 hover:bg-red-700 text-white font-semibold px-5 py-2.5 rounded-lg
+                               transition-colors whitespace-nowrap flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                    Remove All
+                </button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-8 flex items-center gap-2 text-sm text-green-700">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span>No stale entries in /etc/hosts. Everything is clean.</span>
+    </div>
+    {% endif %}
+
+    {# ── Active Sessions in DB ── #}
+    {% if active_db %}
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-semibold text-amber-800 mb-3">Active Sessions (from database)</h2>
+        <p class="text-amber-700 text-sm mb-3">
+            These sessions are marked as active in the database. If the app crashed, they may be stale.
+        </p>
+        <div class="space-y-2">
+            {% for s in active_db %}
+            <div class="flex items-center justify-between bg-amber-100/50 rounded-lg px-4 py-2">
+                <div class="text-sm">
+                    <span class="font-semibold text-amber-900">{{ s.domain }}</span>
+                    <span class="text-amber-700 ml-2">started {{ s.started_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    <span class="text-amber-600 ml-2">PID: {{ s.server_pid or '?' }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% if stale_hosts %}
+        <p class="text-amber-600 text-xs mt-3">Use "Remove All" above to clean up hosts entries and mark these sessions as resolved.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {# ── Session History ── #}
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Session History</h2>
+        {% if history %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-gray-200 text-left text-gray-500 text-xs uppercase tracking-wider">
+                        <th class="pb-3 pr-4">Domain</th>
+                        <th class="pb-3 pr-4">Started</th>
+                        <th class="pb-3 pr-4">Ended</th>
+                        <th class="pb-3">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for s in history %}
+                    <tr>
+                        <td class="py-3 pr-4 font-mono text-gray-900">{{ s.domain }}</td>
+                        <td class="py-3 pr-4 text-gray-500">{{ s.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td class="py-3 pr-4 text-gray-500">
+                            {{ s.ended_at.strftime('%Y-%m-%d %H:%M') if s.ended_at else '—' }}
+                        </td>
+                        <td class="py-3">
+                            {% if s.is_active %}
+                                <span class="inline-flex items-center gap-1 text-red-600 font-medium">
+                                    <span class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                    Active
+                                </span>
+                            {% elif s.cleaned_up %}
+                                <span class="text-green-600">Cleaned</span>
+                            {% else %}
+                                <span class="text-amber-600">Ended (unverified)</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-gray-400 text-sm">No sessions recorded yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

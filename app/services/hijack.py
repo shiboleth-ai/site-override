@@ -145,6 +145,11 @@ class SessionManager:
         with open(self.state_file, "w") as f:
             json.dump(state, f)
 
+        # Record in DB for crash recovery
+        from ..models import record_session_start
+
+        record_session_start(domain, server_pid)
+
         return {"success": True, "domain": domain, "pid": server_pid}
 
     def stop_session(self) -> dict:
@@ -195,6 +200,12 @@ class SessionManager:
             return {"success": False, "error": f"Cleanup failed: {err}"}
 
         self._remove_state()
+
+        # Record in DB
+        from ..models import record_session_end
+
+        record_session_end(domain)
+
         return {"success": True, "domain": domain}
 
     def cleanup_stale(self) -> dict | None:

@@ -17,6 +17,7 @@ cloned_sites/
 .certs/
 .session_state.json
 .server_pid
+*.db
 /tmp/
 
 # OS

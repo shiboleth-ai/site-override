@@ -11,9 +11,15 @@ def create_app():
     app.config["CERTS_DIR"] = os.path.join(base_dir, ".certs")
     app.config["STATE_FILE"] = os.path.join(base_dir, ".session_state.json")
     app.config["PID_FILE"] = os.path.join(base_dir, ".server_pid")
+    app.config["DB_PATH"] = os.path.join(base_dir, "site_override.db")
 
     os.makedirs(app.config["SITES_DIR"], exist_ok=True)
     os.makedirs(app.config["CERTS_DIR"], exist_ok=True)
+
+    # Initialize database
+    from .models import init_db
+
+    init_db(app.config["DB_PATH"])
 
     from .services.hijack import SessionManager
 

@@ -49,6 +49,9 @@ def clone_site(url: str, sites_dir: str) -> dict:
         pass
 
     if os.path.isdir(site_dir):
+        from ..models import get_or_create_site
+
+        get_or_create_site(domain=domain, url=url, path=site_dir)
         return {"success": True, "domain": domain, "path": site_dir}
 
     return {"success": False, "error": f"Clone failed. wget output:\n{result.stderr[-500:] if result else 'timeout'}"}
@@ -102,4 +105,7 @@ def delete_site(domain: str, sites_dir: str) -> dict:
     if not os.path.isdir(site_dir):
         return {"success": False, "error": "Site not found"}
     shutil.rmtree(site_dir)
+    from ..models import delete_site_record
+
+    delete_site_record(domain)
     return {"success": True}
